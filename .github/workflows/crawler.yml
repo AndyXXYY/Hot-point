@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 jobs:
@@ -168,7 +168,15 @@ jobs:
           S3_REGION: ${{ secrets.S3_REGION }}
           GITHUB_ACTIONS: true
         run: uv run python -m trendradar
-
+- name: Publish latest report
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B reports
+          git add -f output/html/latest/current.html
+          git commit -m "chore: update latest hotspot report" || echo "no changes to commit"
+          git push -f origin reports
       # --------------------------------------------------------------------------------
       # ☁️ CLOUDFLARE PAGES DEPLOY / 部署到 Cloudflare Pages（可选）
       # --------------------------------------------------------------------------------
