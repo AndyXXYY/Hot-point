@@ -168,7 +168,7 @@ jobs:
           S3_REGION: ${{ secrets.S3_REGION }}
           GITHUB_ACTIONS: true
         run: uv run python -m trendradar
-- name: Publish latest report
+      - name: Publish latest report
         if: success()
         run: |
           git config user.name "github-actions[bot]"
