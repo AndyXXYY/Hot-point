@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap">
 <style>
-/* 布局：单列工具页。地图是主角，上方是标题与印章计数，下方是操作条与 34 个省份签。 */
+/* 布局：单列工具页。地图是主角，上方是标题与印章计数，层级切换在地图正上方，下方是操作条与按省份的进度签。 */
 :root {
   --bg: #eef1f4;
   --surface: #ffffff;
@@ -16,6 +16,7 @@
   --muted: #5b6876;
   --land: #d6dde5;
   --land-edge: #ffffff;
+  --prov-edge: #8d9bab;
   --seal: #c23a2f;
   --accent: #1f5f8b;
   --accent-ink: #ffffff;
@@ -27,13 +28,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #10151b; --surface: #19212a; --ink: #e5eaef; --muted: #93a0ad;
-    --land: #27313c; --land-edge: #10151b; --seal: #e0564b; --accent: #6aa8d4;
+    --land: #27313c; --land-edge: #19212a; --prov-edge: #5d6b7a; --seal: #e0564b; --accent: #6aa8d4;
     --accent-ink: #0d141b; --hairline: #2b3540; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #10151b; --surface: #19212a; --ink: #e5eaef; --muted: #93a0ad;
-  --land: #27313c; --land-edge: #10151b; --seal: #e0564b; --accent: #6aa8d4;
+  --land: #27313c; --land-edge: #19212a; --prov-edge: #5d6b7a; --seal: #e0564b; --accent: #6aa8d4;
   --accent-ink: #0d141b; --hairline: #2b3540; color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -56,13 +57,17 @@ h1 { font-family: var(--font-display); font-weight: 900; font-size: 30px; line-h
 .seal b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
 .seal span { font-size: 12px; letter-spacing: 0.2em; }
 .mapbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-select, button { font: inherit; font-size: 14px; color: var(--ink); }
-select { background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 10px; max-width: 100%; }
+select, button, input[type="text"] { font: inherit; font-size: 14px; color: var(--ink); }
+select, input[type="text"] { background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 10px; max-width: 100%; }
 button { cursor: pointer; background: transparent; border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 12px; }
 button:hover { border-color: var(--muted); }
+button:disabled { opacity: 0.45; cursor: default; }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
 button.danger { color: var(--seal); border-color: var(--seal); }
-button:focus-visible, select:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.levels { display: inline-flex; border: 1px solid var(--hairline); border-radius: 10px; padding: 3px; background: var(--surface); gap: 2px; }
+.levels button { border: 0; border-radius: 7px; padding: 5px 14px; }
+.levels button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .stage { position: relative; background: var(--surface); border-radius: var(--radius); overflow: hidden; }
 #map { display: block; width: 100%; height: auto; touch-action: manipulation; cursor: pointer; }
 .demo-tag { position: absolute; left: 12px; top: 12px; font-size: 12px; background: var(--bg); color: var(--muted); padding: 3px 10px; border-radius: 999px; }
@@ -72,7 +77,11 @@ button:focus-visible, select:focus-visible, .chip:focus-visible { outline: 2px s
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--hairline); border-radius: 999px; padding: 3px 11px; font-size: 13px; background: transparent; }
 .chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .chip small { font-variant-numeric: tabular-nums; opacity: 0.7; margin-left: 4px; }
+.chip .old { font-size: 11px; opacity: 0.7; margin-left: 3px; }
+.group { display: flex; flex-direction: column; gap: 4px; }
+.group-label { font-size: 12px; color: var(--muted); }
 .panel { background: var(--surface); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .panel h2 { font-family: var(--font-display); font-size: 20px; margin: 0; }
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
@@ -80,13 +89,17 @@ button:focus-visible, select:focus-visible, .chip:focus-visible { outline: 2px s
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .thumb button { position: absolute; right: 3px; top: 3px; padding: 0 6px; font-size: 12px; line-height: 20px; background: var(--surface); border: 0; border-radius: 4px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-dialog { border: 0; border-radius: 14px; padding: 0; width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); background: var(--surface); color: var(--ink); }
+dialog { border: 0; border-radius: 14px; padding: 0; width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 32px); background: var(--surface); color: var(--ink); }
 dialog::backdrop { background: rgb(0 0 0 / 0.45); }
 .dlg { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-.dlg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.dlg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .dlg-head h2 { font-family: var(--font-display); font-size: 24px; margin: 0; }
 .dlg-head .count { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
-#provCanvas { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 8px; }
+#provCanvas { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 8px; cursor: pointer; }
+.unit-card { border-top: 1px solid var(--hairline); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.unit-card h3 { margin: 0; font-size: 17px; }
+.unit-card h3 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+.unit-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
 #exportImg { width: 100%; height: auto; border-radius: 8px; display: block; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: 14px; z-index: 20; max-width: calc(100vw - 32px); }
 footer { color: var(--muted); font-size: 12px; }
@@ -99,9 +112,9 @@ footer { color: var(--muted); font-size: 12px; }
   <header>
     <div>
       <h1>足迹拼图</h1>
-      <p class="sub">选一次旅行的照片，按拍摄地点自动拼进省份轮廓。照片只保存在这台设备的浏览器里。</p>
+      <p class="sub">选一次旅行的照片，按拍摄地点自动拼进省、市、区县的轮廓。照片只保存在这台设备的浏览器里。</p>
     </div>
-    <div class="seal" aria-live="polite"><b id="litCount">0 / 34</b><span>已点亮</span></div>
+    <div class="seal" aria-live="polite"><b id="litCount">0 / 34</b><span id="litLabel">已点亮 · 省</span></div>
   </header>
 
   <div class="mapbar">
@@ -112,56 +125,71 @@ footer { color: var(--muted); font-size: 12px; }
     <button id="deleteMap" type="button" class="danger">删除</button>
   </div>
   <div class="row" id="nameRow" hidden>
-    <input id="nameInput" type="text" maxlength="20" placeholder="例如：爸妈的地图" style="font:inherit;padding:7px 10px;border:1px solid var(--hairline);border-radius:8px;background:var(--surface);color:var(--ink);flex:1 1 180px;min-width:0">
+    <input id="nameInput" type="text" maxlength="20" placeholder="例如：爸妈的地图" style="flex:1 1 180px;min-width:0">
     <button id="nameOk" type="button" class="primary">确定</button>
     <button id="nameCancel" type="button">取消</button>
   </div>
 
+  <div class="row">
+    <div class="levels" role="group" aria-label="点亮单位">
+      <button type="button" data-level="p" aria-pressed="true">省</button>
+      <button type="button" data-level="c" aria-pressed="false">地级市</button>
+      <button type="button" data-level="x" aria-pressed="false">区县</button>
+    </div>
+    <span class="sub" id="levelHint" style="margin:0"></span>
+  </div>
+
   <div class="stage">
-    <canvas id="map" aria-label="中国省级行政区照片拼图地图"></canvas>
+    <canvas id="map" aria-label="中国行政区照片拼图地图"></canvas>
     <span class="demo-tag" id="demoTag" hidden>示例效果 · 添加照片后显示你的地图</span>
     <span class="tip" id="tip" hidden></span>
   </div>
 
   <div class="actions">
-    <button id="addAuto" type="button" class="primary">添加照片（按位置自动分省）</button>
+    <button id="addAuto" type="button" class="primary">添加照片（按位置自动归属）</button>
     <button id="exportBtn" type="button">生成分享图</button>
-    <span class="hint">没有定位信息的照片会放进“待分配”，再手动选省份。点地图上的省份可以单独添加、重排或删除。</span>
+    <span class="hint">照片按 GPS 一次定位到区县，切换“省 / 地级市 / 区县”不用重新导入。没有定位的照片进“待分配”。</span>
   </div>
   <input id="fileAuto" type="file" accept="image/*" multiple hidden>
-  <input id="fileProv" type="file" accept="image/*" multiple hidden>
+  <input id="fileUnit" type="file" accept="image/*" multiple hidden>
 
   <section class="panel" id="pending" hidden>
     <h2>待分配 <span class="sub" id="pendingCount"></span></h2>
     <div class="thumbs" id="pendingThumbs"></div>
     <div class="row">
-      <label for="pendingProv" class="sub" style="margin:0">放入</label>
-      <select id="pendingProv"></select>
+      <label for="pendProv" class="sub" style="margin:0">放入</label>
+      <select id="pendProv" aria-label="省"></select>
+      <select id="pendCity" aria-label="地级市"></select>
+      <select id="pendCounty" aria-label="区县"></select>
       <button id="pendingAssign" type="button" class="primary">全部放入</button>
       <button id="pendingDrop" type="button">全部丢弃</button>
     </div>
   </section>
 
   <section>
-    <p class="sub" style="margin:0 0 8px">34 个省级行政区</p>
+    <p class="sub" style="margin:0 0 8px" id="chipsLabel">按省份</p>
     <div class="chips" id="chips"></div>
   </section>
 
-  <footer>省界数据来自 Apache ECharts 4.9.0 内置地图（示意，未经审图）。南海诸岛以示意框表示。</footer>
+  <footer>边界几何约为 2017–2018 年区划（echarts-china-counties-js），名称与归属按民政部 2025 年县以上区划代码更正；标“旧”的区县在之后被拆分重划。示意用途，未经审图。南海诸岛以示意框表示。</footer>
 </div>
 
 <dialog id="provDlg">
   <div class="dlg">
     <div class="dlg-head"><h2 id="provName"></h2><span class="count" id="provCount"></span></div>
     <canvas id="provCanvas"></canvas>
-    <div class="row">
-      <button id="provAdd" type="button" class="primary">添加照片</button>
-      <button id="provShuffle" type="button">重排</button>
-      <button id="provClear" type="button" class="danger">清空</button>
-      <span style="flex:1"></span>
-      <button id="provClose" type="button">关闭</button>
+    <div class="unit-list" id="unitList"></div>
+    <div class="unit-card">
+      <h3 id="unitName"></h3>
+      <div class="row">
+        <button id="unitAdd" type="button" class="primary">添加照片</button>
+        <button id="unitShuffle" type="button">重排</button>
+        <button id="unitClear" type="button" class="danger">清空</button>
+        <span style="flex:1"></span>
+        <button id="provClose" type="button">关闭</button>
+      </div>
+      <div class="thumbs" id="unitThumbs"></div>
     </div>
-    <div class="thumbs" id="provThumbs"></div>
   </div>
 </dialog>
 
@@ -175,44 +203,152 @@ footer { color: var(--muted); font-size: 12px; }
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="china-provinces.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
+<script src="china-admin.js"></script>
 <script>
 (() => {
 'use strict';
-const PROVS = window.CHINA_PROVINCES || [];
-const NANHAI = window.CHINA_NANHAI || [];
 const $ = (id) => document.getElementById(id);
+const T = window.CHINA_TOPO;
+if (!T || !window.topojson) { document.querySelector('.wrap').insertAdjacentHTML('beforeend', '<p class="sub">地图数据没有加载成功：缺少 china-admin.js 或 vendor/topojson-client.min.js。</p>'); return; }
 
-// ---------- 投影：等距圆柱 + 纬度余弦压缩，省级尺度足够 ----------
+// 南海诸岛示意框（来自 Apache ECharts 4.9.0 src/coord/geo/fix/nanhai.js，按其换算到经纬度）
+const NANHAI = [
+  [[0, 3.5], [7, 11.2], [15, 11.9], [30, 7], [42, 0.7], [52, 0.7], [56, 7.7], [59, 0.7], [64, 0.7], [64, 0], [5, 0], [0, 3.5]],
+  [[13, 16.1], [19, 14.7], [16, 21.7], [11, 23.1], [13, 16.1]], [[12, 32.2], [14, 38.5], [15, 38.5], [13, 32.2], [12, 32.2]],
+  [[16, 47.6], [12, 53.2], [13, 53.2], [18, 47.6], [16, 47.6]], [[6, 64.4], [8, 70], [9, 70], [8, 64.4], [6, 64.4]],
+  [[23, 82.6], [29, 79.8], [30, 79.8], [25, 82.6], [23, 82.6]], [[37, 70.7], [43, 62.3], [44, 62.3], [39, 70.7], [37, 70.7]],
+  [[48, 51.1], [51, 45.5], [53, 45.5], [50, 51.1], [48, 51.1]], [[51, 35], [51, 28.7], [53, 28.7], [53, 35], [51, 35]],
+  [[52, 22.4], [55, 17.5], [56, 17.5], [53, 22.4], [52, 22.4]], [[58, 12.6], [62, 7], [63, 7], [60, 12.6], [58, 12.6]],
+  [[0, 3.5], [0, 93.1], [64, 93.1], [64, 0], [63, 0], [63, 92.4], [1, 92.4], [1, 3.5], [0, 3.5]],
+].map(r => r.map(([x, y]) => [x / 10.5 + 126, y / (-10.5 / 0.75) + 25]));
+
+// ---------- 投影 ----------
 const K = Math.cos(35 * Math.PI / 180);
 const proj = ([lon, lat]) => [lon * K, -lat];
-let world = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
-for (const p of PROVS) {
-  p.bbox = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
-  p.proj = p.polygons.map(poly => poly.map(ring => ring.map(pt => {
-    const q = proj(pt);
-    p.bbox.x0 = Math.min(p.bbox.x0, q[0]); p.bbox.y0 = Math.min(p.bbox.y0, q[1]);
-    p.bbox.x1 = Math.max(p.bbox.x1, q[0]); p.bbox.y1 = Math.max(p.bbox.y1, q[1]);
-    return q;
-  })));
-  for (const k of ['x0', 'y0']) world[k] = Math.min(world[k], p.bbox[k]);
-  for (const k of ['x1', 'y1']) world[k] = Math.max(world[k], p.bbox[k]);
-}
-const nanhaiProj = NANHAI.map(r => r.map(proj));
-for (const r of nanhaiProj) for (const [x, y] of r) {
-  world.x0 = Math.min(world.x0, x); world.x1 = Math.max(world.x1, x);
-  world.y0 = Math.min(world.y0, y); world.y1 = Math.max(world.y1, y);
-}
-const byId = Object.fromEntries(PROVS.map(p => [p.id, p]));
+const emptyBox = () => ({ x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+const grow = (b, x, y) => { if (x < b.x0) b.x0 = x; if (y < b.y0) b.y0 = y; if (x > b.x1) b.x1 = x; if (y > b.y1) b.y1 = y; };
 
-function buildPath(p, tx) {
+// ---------- 三层行政区 ----------
+const LEVELS = {
+  p: { name: '省', label: '省级行政区', field: 'p' },
+  c: { name: '地级市', label: '地级行政区', field: 'c' },
+  x: { name: '区县', label: '县级行政区', field: 'k' },
+};
+// 数据里只有县级几何。地级、省由所含县的多边形组成（一个 Path2D、非零环绕填充，内部边界自然消失），
+// 边界线另用 topojson.mesh 取相邻县属性不同的弧段。
+const units = { p: [], c: [], x: [] }, byKey = { p: new Map(), c: new Map(), x: new Map() };
+function unitFor(L, key, init) {
+  let u = byKey[L].get(key);
+  if (!u) {
+    u = { level: L, key, polygons: [], proj: [], bbox: emptyBox(), gbox: emptyBox(), rule: L === 'x' ? 'evenodd' : 'nonzero', ...init };
+    byKey[L].set(key, u); units[L].push(u);
+  }
+  return u;
+}
+for (const f of topojson.feature(T, T.objects.counties).features) {
+  if (!f.geometry) continue;
+  const pr = f.properties;
+  const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+  const targets = [
+    [unitFor('x', pr.k, { name: pr.n, old: !!pr.old, prov: pr.p, city: pr.c }), polys],
+    [unitFor('c', pr.c, { name: T.names.c[pr.c] || pr.c, prov: pr.p, city: pr.c }), polys],
+    // 海南省若把南沙也算进外接框会覆盖整个南海；省级拼图只用北纬 17.8° 以北的部分
+    [unitFor('p', pr.p, { name: T.names.p[pr.p] || pr.p, prov: pr.p, city: null }), pr.p === '46' ? polys.filter(poly => poly[0].some(([, y]) => y > 17.8)) : polys],
+  ];
+  for (const [u, ps] of targets) for (const poly of ps) {
+    u.polygons.push(poly);
+    u.proj.push(poly.map(ring => ring.map(pt => { grow(u.gbox, pt[0], pt[1]); const q = proj(pt); grow(u.bbox, q[0], q[1]); return q; })));
+  }
+}
+for (const L of Object.keys(units)) units[L].sort((a, b) => a.key < b.key ? -1 : 1);
+
+// 边界线（投影后的折线），按需计算并缓存
+const meshCache = new Map();
+function mesh(id, filter) {
+  if (!meshCache.has(id)) {
+    const m = topojson.mesh(T, T.objects.counties, filter);
+    meshCache.set(id, m.coordinates.map(line => line.map(proj)));
+  }
+  return meshCache.get(id);
+}
+const P = (g) => g.properties;
+// L 层内部边界（只取两侧属于不同单元的弧段；源数据相邻县之间有细缝，单侧弧段会在省内画出白色碎线）
+function levelMesh(L, provKey) {
+  const f = LEVELS[L].field;
+  return mesh('lv' + L + (provKey || ''), (a, b) => a !== b && (!provKey || P(a).p === provKey || P(b).p === provKey) && P(a)[f] !== P(b)[f]);
+}
+// 某个单元自己的外轮廓
+function outlineMesh(L, key) {
+  const f = LEVELS[L].field;
+  return mesh('ol' + L + key, (a, b) => (P(a)[f] === key) !== (P(b)[f] === key) || (a === b && P(a)[f] === key));
+}
+function linesPath(lines, tx) {
   const path = new Path2D();
-  for (const poly of p.proj) for (const ring of poly) {
-    ring.forEach(([x, y], i) => { const [a, b] = tx(x, y); i ? path.lineTo(a, b) : path.moveTo(a, b); });
+  for (const line of lines) for (let i = 0; i < line.length; i++) { const [a, b] = tx(line[i][0], line[i][1]); i ? path.lineTo(a, b) : path.moveTo(a, b); }
+  return path;
+}
+const world = emptyBox();
+for (const u of units.p) { grow(world, u.bbox.x0, u.bbox.y0); grow(world, u.bbox.x1, u.bbox.y1); }
+const nanhaiProj = NANHAI.map(r => r.map(proj));
+const NANHAI_BOX = emptyBox();
+for (const r of nanhaiProj) for (const [x, y] of r) { grow(world, x, y); grow(NANHAI_BOX, x, y); }
+
+const childrenOf = (L, provKey) => units[L].filter(u => u.prov === provKey);
+function fullName(u) {
+  if (u.level === 'p') return u.name;
+  const p = byKey.p.get(u.prov);
+  if (u.level === 'c') return p && p.name !== u.name ? p.name + ' ' + u.name : u.name;
+  const c = byKey.c.get(u.city);
+  return (c ? c.name : (p ? p.name : '')) + ' ' + u.name;
+}
+
+function buildPath(u, tx) {
+  const path = new Path2D();
+  for (const poly of u.proj) for (const ring of poly) {
+    for (let i = 0; i < ring.length; i++) { const [a, b] = tx(ring[i][0], ring[i][1]); i ? path.lineTo(a, b) : path.moveTo(a, b); }
     path.closePath();
   }
   return path;
 }
+
+// ---------- 定位：经纬度 → 区县 → 地级 → 省 ----------
+function inRing(ring, x, y) {
+  let c = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+function codesOf(u) {
+  if (u.level === 'p') return { prov: u.key, city: null, county: null };
+  if (u.level === 'c') return { prov: u.prov, city: u.key, county: null };
+  return { prov: u.prov, city: u.city, county: u.key };
+}
+function locate(lon, lat) {
+  for (const u of units.x) {
+    const b = u.gbox;
+    if (lon < b.x0 || lon > b.x1 || lat < b.y0 || lat > b.y1) continue;
+    let c = false;
+    for (const poly of u.polygons) for (const ring of poly) if (inRing(ring, lon, lat)) c = !c;
+    if (c) return codesOf(u);
+  }
+  // 海岸线附近：简化后的边界可能把海边的点判到界外，取 0.5° 内最近的区县
+  let best = null, bd = 0.25;
+  for (const u of units.x) {
+    const b = u.gbox;
+    if (lon < b.x0 - 0.5 || lon > b.x1 + 0.5 || lat < b.y0 - 0.5 || lat > b.y1 + 0.5) continue;
+    for (const poly of u.polygons) for (const ring of poly) for (const [x, y] of ring) {
+      const d = (x - lon) ** 2 + (y - lat) ** 2;
+      if (d < bd) { bd = d; best = u; }
+    }
+  }
+  return best ? codesOf(best) : null;
+}
+const keyAt = (ph, L) => (L === 'p' ? ph.prov : L === 'c' ? ph.city : ph.county) || null;
+// 只读调试入口：在控制台里 __zuji.where(经度, 纬度) 查看归属
+window.__zuji = { where: (lon, lat) => { const r = locate(lon, lat); return r && r.county ? fullName(byKey.x.get(r.county)) : null; }, counts: () => ({ p: units.p.length, c: units.c.length, x: units.x.length }) };
 
 // ---------- 随机数 ----------
 function rng(seed) {
@@ -220,81 +356,129 @@ function rng(seed) {
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 function shuffle(arr, r) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; }
 
-// ---------- 拼图布局：在省份外接框里铺网格，只保留落在轮廓内的格子 ----------
-const testCanvas = document.createElement('canvas');
-const testCtx = testCanvas.getContext('2d');
+// ---------- 拼图布局：在外接框里铺网格，只保留落在轮廓内的格子 ----------
+const testCtx = document.createElement('canvas').getContext('2d');
 const layoutCache = new Map();
-function layout(p, n, seed) {
-  const key = p.id + ':' + n + ':' + seed;
+function layout(u, n, seed) {
+  const key = u.level + u.key + ':' + n + ':' + seed;
   if (layoutCache.has(key)) return layoutCache.get(key);
-  const bw = p.bbox.x1 - p.bbox.x0, bh = p.bbox.y1 - p.bbox.y0;
+  const bw = u.bbox.x1 - u.bbox.x0 || 1e-6, bh = u.bbox.y1 - u.bbox.y0 || 1e-6;
   const S = 600 / Math.max(bw, bh), W = bw * S, H = bh * S;
-  const path = buildPath(p, (x, y) => [(x - p.bbox.x0) * S, (y - p.bbox.y0) * S]);
+  const path = buildPath(u, (x, y) => [(x - u.bbox.x0) * S, (y - u.bbox.y0) * S]);
   const r = rng(seed * 7919 + n);
   const ox = r(), oy = r();
-  const inside = (x, y) => testCtx.isPointInPath(path, x, y, 'evenodd');
+  const inside = (x, y) => testCtx.isPointInPath(path, x, y, u.rule);
   const grid = (s) => {
     const cells = [];
     for (let y = -oy * s; y < H; y += s) for (let x = -ox * s; x < W; x += s) {
-      const pts = [[x + s / 2, y + s / 2], [x + s * 0.15, y + s * 0.15], [x + s * 0.85, y + s * 0.15], [x + s * 0.15, y + s * 0.85], [x + s * 0.85, y + s * 0.85]];
-      if (pts.some(([a, b]) => inside(a, b))) cells.push({ x, y, s });
+      if (inside(x + s / 2, y + s / 2) || inside(x + s * 0.15, y + s * 0.15) || inside(x + s * 0.85, y + s * 0.15) || inside(x + s * 0.15, y + s * 0.85) || inside(x + s * 0.85, y + s * 0.85)) cells.push({ x, y, s });
     }
     return cells;
   };
-  let cells;
-  if (n === 1) cells = [{ x: 0, y: 0, s: Math.max(W, H) }];
-  else {
-    let lo = 3, hi = Math.max(W, H), best = grid(lo);
-    for (let i = 0; i < 14; i++) {
+  let cells = [];
+  if (n > 1) {
+    // 用多边形面积估计格子边长，再在附近二分，避免从 3px 的细网格开始全量试算
+    let area = 0;
+    for (const poly of u.proj) poly.forEach((ring, ri) => {
+      let a = 0;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
+      area += (ri === 0 ? 1 : -1) * Math.abs(a / 2);
+    });
+    const s0 = Math.sqrt(Math.max(area, 1e-9) * S * S / n);
+    let lo = Math.max(3, s0 * 0.45), hi = Math.min(Math.max(W, H), s0 * 1.2);
+    cells = grid(lo);
+    while (cells.length < n && lo > 3) { hi = lo; lo = Math.max(3, lo / 2); cells = grid(lo); }
+    for (let i = 0; i < 7; i++) {
       const mid = (lo + hi) / 2, c = grid(mid);
-      if (c.length >= n) { best = c; lo = mid; } else hi = mid;
+      if (c.length >= n) { cells = c; lo = mid; } else hi = mid;
     }
-    cells = best;
   }
+  if (cells.length < Math.min(n, 2)) cells = [{ x: 0, y: 0, s: Math.max(W, H) }];
   const order = shuffle([...Array(n).keys()], r);
   shuffle(cells, r);
-  const out = cells.map((c, i) => ({
-    x: c.x / W, y: c.y / H, w: c.s / W, h: c.s / H,
-    photo: i < n ? order[i] : Math.floor(r() * n),
-  }));
+  const out = cells.map((c, i) => ({ x: c.x / W, y: c.y / H, w: c.s / W, h: c.s / H, photo: i < n ? order[i] : Math.floor(r() * n) }));
   layoutCache.set(key, out);
   return out;
 }
 
 // ---------- 主题色 ----------
-let colors = {};
+const colors = {};
 function readColors() {
   const cs = getComputedStyle(document.documentElement);
-  for (const k of ['bg', 'surface', 'ink', 'muted', 'land', 'land-edge', 'seal', 'accent']) colors[k] = cs.getPropertyValue('--' + k).trim();
+  for (const k of ['bg', 'surface', 'ink', 'muted', 'land', 'land-edge', 'prov-edge', 'seal', 'accent']) colors[k] = cs.getPropertyValue('--' + k).trim();
 }
 
-// ---------- 绘制一个省 ----------
+// ---------- 绘制 ----------
 function drawCover(ctx, img, x, y, w, h) {
-  const iw = img.width, ih = img.height;
-  const sc = Math.max(w / iw, h / ih);
-  const sw = w / sc, sh = h / sc;
+  if (w <= 0 || h <= 0) return;
+  const iw = img.width, ih = img.height, sc = Math.max(w / iw, h / ih), sw = w / sc, sh = h / sc;
   ctx.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, x, y, w, h);
 }
-function drawProvince(ctx, p, tx, photos, seed, gap) {
-  const path = buildPath(p, tx);
+function drawUnit(ctx, u, tx, photos, gap) {
+  const path = buildPath(u, tx);
   ctx.fillStyle = colors.land;
-  ctx.fill(path, 'evenodd');
-  const imgs = photos.map(ph => imageFor(ph)).filter(Boolean);
+  ctx.fill(path, u.rule);
+  const imgs = photos.map(imageFor).filter(Boolean);
   if (imgs.length) {
-    const [ax, ay] = tx(p.bbox.x0, p.bbox.y0), [bx, by] = tx(p.bbox.x1, p.bbox.y1);
+    const [ax, ay] = tx(u.bbox.x0, u.bbox.y0), [bx, by] = tx(u.bbox.x1, u.bbox.y1);
     const W = bx - ax, H = by - ay;
     ctx.save();
-    ctx.clip(path, 'evenodd');
+    ctx.clip(path, u.rule);
     ctx.fillStyle = colors.surface;
     ctx.fillRect(ax, ay, W, H);
-    for (const c of layout(p, imgs.length, seed)) {
-      const g = imgs.length === 1 ? 0 : gap;
-      drawCover(ctx, imgs[c.photo], ax + c.x * W + g / 2, ay + c.y * H + g / 2, c.w * W - g, c.h * H - g);
-    }
+    const g = imgs.length === 1 ? 0 : gap;
+    for (const c of layout(u, imgs.length, seedOf(u))) drawCover(ctx, imgs[c.photo], ax + c.x * W + g / 2, ay + c.y * H + g / 2, c.w * W - g, c.h * H - g);
     ctx.restore();
   }
   return path;
+}
+function fit(box, width, height, pad) {
+  const ww = box.x1 - box.x0, wh = box.y1 - box.y0;
+  const s = Math.min((width - pad * 2) / ww, (height - pad * 2) / wh);
+  const ox = (width - ww * s) / 2, oy = (height - wh * s) / 2;
+  return { s, fn: (x, y) => [ox + (x - box.x0) * s, oy + (y - box.y0) * s] };
+}
+// 在 box 范围内画 level 层：省内视图传入 provKey 只画该省
+function drawLevel(ctx, width, height, pad, box, L, provKey, highlightKey) {
+  const t = fit(box, width, height, pad);
+  ctx.save();
+  ctx.beginPath();
+  if (provKey) ctx.rect(0, 0, width, height);
+  else {
+    // 全国视图：北纬 17.8° 以南的南海岛礁由右下角示意框表示，不在主图里画
+    const ySouth = t.fn(0, -17.8)[1];
+    ctx.rect(0, 0, width, ySouth);
+    const [ix0, iy0] = t.fn(NANHAI_BOX.x0, NANHAI_BOX.y0), [ix1, iy1] = t.fn(NANHAI_BOX.x1, NANHAI_BOX.y1);
+    ctx.rect(ix0 - 4, iy0 - 4, ix1 - ix0 + 8, iy1 - iy0 + 8);
+  }
+  ctx.clip();
+  const list = provKey ? (L === 'p' ? [byKey.p.get(provKey)] : childrenOf(L, provKey)) : units[L];
+  const fine = L === 'x' ? 0.35 : L === 'c' ? 0.6 : 1;
+  const paths = [];
+  for (const u of list) paths.push([u, drawUnit(ctx, u, t.fn, photosIn(u), width > 900 ? 1.5 : 0.8)]);
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = colors['land-edge'];
+  ctx.lineWidth = provKey ? Math.max(0.8, fine * 1.6) : fine * (width > 900 ? 1.6 : 1);
+  ctx.stroke(linesPath(levelMesh(L, provKey), t.fn));
+  if (L !== 'p') {
+    ctx.strokeStyle = colors['prov-edge'];
+    ctx.lineWidth = provKey ? 1.4 : 0.9;
+    ctx.stroke(linesPath(provKey ? outlineMesh('p', provKey) : levelMesh('p', null), t.fn));
+  }
+  if (highlightKey) {
+    ctx.strokeStyle = colors.accent; ctx.lineWidth = 2.5;
+    ctx.stroke(linesPath(outlineMesh(L, highlightKey), t.fn));
+  }
+  if (!provKey) {
+    const nh = new Path2D();
+    for (const ring of nanhaiProj) ring.forEach(([x, y], i) => { const [a, b] = t.fn(x, y); i ? nh.lineTo(a, b) : nh.moveTo(a, b); });
+    ctx.fillStyle = colors.muted;
+    ctx.fill(nh, 'evenodd');
+  }
+  ctx.restore();
+  return paths;
 }
 
 // ---------- 存储（IndexedDB，失败则只存内存） ----------
@@ -317,8 +501,7 @@ function idb(store, mode, fn) {
   if (!db) return Promise.resolve(null);
   return new Promise((resolve) => {
     try {
-      const t = db.transaction(store, mode), s = t.objectStore(store);
-      const out = fn(s);
+      const t = db.transaction(store, mode), out = fn(t.objectStore(store));
       t.oncomplete = () => resolve(out && out.result !== undefined ? out.result : null);
       t.onerror = () => resolve(null);
     } catch (e) { resolve(null); }
@@ -331,20 +514,21 @@ const dbDel = (store, k) => idb(store, 'readwrite', s => s.delete(k));
 // ---------- 状态 ----------
 let maps = [], allPhotos = [], current = null;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-const mapPhotos = () => allPhotos.filter(p => p.mapId === current.id);
-const provPhotos = (pid) => mapPhotos().filter(p => p.prov === pid);
-const pendingPhotos = () => mapPhotos().filter(p => !p.prov);
+const level = () => (current && current.level) || 'p';
+const realPhotos = () => current ? allPhotos.filter(p => p.mapId === current.id) : [];
+const hasReal = () => realPhotos().some(p => p.prov);
+const activePhotos = () => hasReal() ? realPhotos() : DEMO;
+const photosIn = (u) => activePhotos().filter(ph => keyAt(ph, u.level) === u.key);
+const seedOf = (u) => (current && current.seeds && current.seeds[u.level + ':' + u.key]) || (hashStr(u.key) % 1000) + 1;
 
 const imgCache = new Map();
 function imageFor(ph) {
   if (ph.canvas) return ph.canvas;
   const c = imgCache.get(ph.id);
-  if (c && c.ready) return c.img;
-  if (!c) {
-    const entry = { ready: false, img: null };
-    imgCache.set(ph.id, entry);
-    createImageBitmap(ph.blob).then(bmp => { entry.img = bmp; entry.ready = true; scheduleRender(); }).catch(() => {});
-  }
+  if (c) return c.ready ? c.img : null;
+  const entry = { ready: false, img: null };
+  imgCache.set(ph.id, entry);
+  createImageBitmap(ph.blob).then(bmp => { entry.img = bmp; entry.ready = true; scheduleRender(); }).catch(() => {});
   return null;
 }
 const urlCache = new Map();
@@ -354,116 +538,115 @@ function thumbURL(ph) {
   return urlCache.get(ph.id);
 }
 
-// ---------- 示例数据（仅在地图为空时展示，不保存） ----------
-function makeDemo() {
+// ---------- 示例（地图为空时展示，不保存） ----------
+const DEMO = (() => {
+  const spots = [[116.40, 39.91, 2], [121.47, 31.23, 2], [120.15, 30.27, 3], [120.10, 30.25, 2], [104.06, 30.66, 4], [103.65, 30.98, 2], [100.27, 25.60, 4], [102.71, 25.04, 3],
+    [100.23, 26.87, 3], [91.13, 29.65, 3], [108.94, 34.34, 3], [113.26, 23.13, 2], [109.51, 18.25, 2], [118.09, 24.48, 3], [87.62, 43.83, 2], [110.29, 25.27, 3], [126.63, 45.75, 2]];
   const palettes = [['#2f6f8f', '#9fd0d9'], ['#7a8b3b', '#e3d58a'], ['#b5543b', '#f0b67f'], ['#3d4f7d', '#c9a7d6'], ['#2e7d5b', '#bfe3b4'], ['#8a5a44', '#e8cfa9']];
-  const demo = [];
-  const pick = { '110000': 2, '310000': 2, '330000': 6, '510000': 8, '530000': 10, '540000': 5, '610000': 4, '440000': 6, '460000': 3, '350000': 4, '650000': 7 };
-  let k = 0;
-  for (const [pid, n] of Object.entries(pick)) for (let i = 0; i < n; i++, k++) {
-    const c = document.createElement('canvas'); c.width = c.height = 120;
-    const g = c.getContext('2d'), [a, b] = palettes[k % palettes.length];
-    const gr = g.createLinearGradient(0, 0, 120, 120); gr.addColorStop(0, a); gr.addColorStop(1, b);
-    g.fillStyle = gr; g.fillRect(0, 0, 120, 120);
-    g.fillStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.arc(30 + (k * 37) % 60, 40, 18, 0, 7); g.fill();
-    demo.push({ id: 'demo' + k, prov: pid, canvas: c });
+  const out = []; let k = 0;
+  for (const [lon, lat, n] of spots) {
+    const loc = locate(lon, lat);
+    if (!loc) continue;
+    for (let i = 0; i < n; i++, k++) {
+      const c = document.createElement('canvas'); c.width = c.height = 120;
+      const g = c.getContext('2d'), [a, b] = palettes[k % palettes.length];
+      const gr = g.createLinearGradient(0, 0, 120, 120); gr.addColorStop(0, a); gr.addColorStop(1, b);
+      g.fillStyle = gr; g.fillRect(0, 0, 120, 120);
+      g.fillStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.arc(30 + (k * 37) % 60, 40, 18, 0, 7); g.fill();
+      out.push({ id: 'demo' + k, canvas: c, ...loc });
+    }
   }
-  return demo;
-}
-const DEMO = makeDemo();
+  return out;
+})();
 
-// ---------- 主地图渲染 ----------
+// ---------- 主地图 ----------
 const mapCanvas = $('map'), mctx = mapCanvas.getContext('2d');
-let screenPaths = [], renderQueued = false, mapTx = null;
-function scheduleRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(() => { renderQueued = false; render(); }); } }
-
-function fitTx(width, height, pad) {
-  const ww = world.x1 - world.x0, wh = world.y1 - world.y0;
-  const s = Math.min((width - pad * 2) / ww, (height - pad * 2) / wh);
-  const ox = (width - ww * s) / 2, oy = (height - wh * s) / 2;
-  return { s, fn: (x, y) => [ox + (x - world.x0) * s, oy + (y - world.y0) * s] };
+let screenPaths = [], renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; render(); if ($('provDlg').open) fillDialog(); });
 }
-function drawWorld(ctx, width, height, pad, photosFor, gap) {
-  const t = fitTx(width, height, pad);
-  const paths = [];
-  for (const p of PROVS) {
-    const phs = photosFor(p.id);
-    paths.push([p, drawProvince(ctx, p, t.fn, phs, seedOf(p.id), gap)]);
-  }
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = colors['land-edge'];
-  ctx.lineWidth = Math.max(0.6, t.s * 0.06);
-  for (const [, path] of paths) ctx.stroke(path);
-  const nh = new Path2D();
-  for (const ring of nanhaiProj) ring.forEach(([x, y], i) => { const [a, b] = t.fn(x, y); i ? nh.lineTo(a, b) : nh.moveTo(a, b); });
-  ctx.fillStyle = colors.muted;
-  ctx.fill(nh, 'evenodd');
-  return { t, paths };
-}
-function seedOf(pid) { return (current && current.seeds && current.seeds[pid]) || 1; }
-
 function render() {
   readColors();
-  const cssW = mapCanvas.clientWidth || 800;
-  const cssH = Math.round(cssW * 0.78);
+  const cssW = mapCanvas.clientWidth || 800, cssH = Math.round(cssW * 0.78);
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   if (mapCanvas.width !== Math.round(cssW * dpr) || mapCanvas.height !== Math.round(cssH * dpr)) {
     mapCanvas.width = Math.round(cssW * dpr); mapCanvas.height = Math.round(cssH * dpr);
     mapCanvas.style.height = cssH + 'px';
   }
   mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  mctx.fillStyle = colors.surface;
-  mctx.fillRect(0, 0, cssW, cssH);
-  const real = current && mapPhotos().some(p => p.prov);
-  $('demoTag').hidden = !!real;
-  const photosFor = real ? (pid) => provPhotos(pid) : (pid) => DEMO.filter(d => d.prov === pid);
-  const r = drawWorld(mctx, cssW, cssH, 12, photosFor, cssW > 600 ? 1 : 0.6);
-  screenPaths = r.paths; mapTx = r.t;
-  updateCounters(real);
+  mctx.fillStyle = colors.surface; mctx.fillRect(0, 0, cssW, cssH);
+  $('demoTag').hidden = hasReal();
+  screenPaths = drawLevel(mctx, cssW, cssH, 12, world, level(), null, null);
+  updateSummary();
 }
-
-function updateCounters(real) {
-  const lit = real ? PROVS.filter(p => provPhotos(p.id).length).length : 0;
-  $('litCount').textContent = lit + ' / 34';
-  const chips = $('chips');
-  chips.textContent = '';
-  for (const p of PROVS) {
-    const n = real ? provPhotos(p.id).length : 0;
+function litUnits(L) {
+  const set = new Set();
+  for (const ph of activePhotos()) { const k = keyAt(ph, L); if (k) set.add(k); }
+  return set;
+}
+function updateSummary() {
+  const L = level(), real = hasReal();
+  const lit = real ? litUnits(L) : new Set();
+  $('litCount').textContent = lit.size + ' / ' + units[L].length;
+  $('litLabel').textContent = '已点亮 · ' + LEVELS[L].name;
+  $('levelHint').textContent = '共 ' + units[L].length + ' 个' + LEVELS[L].label;
+  document.querySelectorAll('.levels button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.level === L)));
+  $('chipsLabel').textContent = L === 'p' ? '34 个省级行政区' : '按省份查看（已点亮 / 总数）';
+  const chips = $('chips'); chips.textContent = '';
+  for (const p of units.p) {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'chip' + (n ? ' on' : '');
-    b.textContent = p.name;
-    if (n) { const s = document.createElement('small'); s.textContent = n; b.appendChild(s); }
-    b.onclick = () => openProvince(p.id);
+    b.type = 'button'; b.className = 'chip';
+    const s = document.createElement('small');
+    if (L === 'p') {
+      const n = real ? realPhotos().filter(ph => ph.prov === p.key).length : 0;
+      if (n) { b.classList.add('on'); s.textContent = n; }
+    } else {
+      const kids = childrenOf(L, p.key), n = kids.filter(u => lit.has(u.key)).length;
+      if (n) b.classList.add('on');
+      s.textContent = n + '/' + kids.length;
+    }
+    b.textContent = p.name; b.appendChild(s);
+    b.onclick = () => openDialog(p.key, null);
     chips.appendChild(b);
   }
   renderPending();
 }
 
-// 点击与悬停
-function hit(ev) {
-  const rect = mapCanvas.getBoundingClientRect();
-  const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
-  const dpr = mapCanvas.width / rect.width;
-  mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  for (const [p, path] of screenPaths) if (mctx.isPointInPath(path, x * dpr, y * dpr, 'evenodd')) return { p, x, y };
+function hitTest(canvas, ctx, paths, ev) {
+  const rect = canvas.getBoundingClientRect();
+  const x = ev.clientX - rect.left, y = ev.clientY - rect.top, dpr = canvas.width / rect.width;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (const [u, path] of paths) if (ctx.isPointInPath(path, x * dpr, y * dpr, u.rule)) return { u, x, y };
   return null;
 }
-mapCanvas.addEventListener('click', (ev) => { const h = hit(ev); if (h) openProvince(h.p.id); });
+mapCanvas.addEventListener('click', (ev) => { const h = hitTest(mapCanvas, mctx, screenPaths, ev); if (h) openDialog(h.u.prov, h.u.key); });
+let tipFrame = 0;
 mapCanvas.addEventListener('mousemove', (ev) => {
-  const h = hit(ev), tip = $('tip');
-  if (!h) { tip.hidden = true; return; }
-  const n = current && mapPhotos().some(p => p.prov) ? provPhotos(h.p.id).length : 0;
-  tip.textContent = h.p.name + (n ? ' · ' + n + ' 张' : '');
-  tip.style.left = Math.min(h.x + 12, mapCanvas.clientWidth - 90) + 'px'; tip.style.top = (h.y + 12) + 'px';
-  tip.hidden = false;
+  if (tipFrame) return;
+  tipFrame = requestAnimationFrame(() => {
+    tipFrame = 0;
+    const h = hitTest(mapCanvas, mctx, screenPaths, ev), tip = $('tip');
+    if (!h) { tip.hidden = true; return; }
+    const n = hasReal() ? photosIn(h.u).length : 0;
+    tip.textContent = fullName(h.u) + (h.u.old ? '（旧区划）' : '') + (n ? ' · ' + n + ' 张' : '');
+    tip.style.left = Math.min(h.x + 12, mapCanvas.clientWidth - 160) + 'px'; tip.style.top = (h.y + 12) + 'px';
+    tip.hidden = false;
+  });
 });
 mapCanvas.addEventListener('mouseleave', () => { $('tip').hidden = true; });
 
-// ---------- EXIF GPS 读取（仅 JPEG） ----------
+document.querySelectorAll('.levels button').forEach(b => b.addEventListener('click', async () => {
+  current.level = b.dataset.level;
+  await dbPut('maps', current);
+  render();
+}));
+
+// ---------- EXIF GPS（仅 JPEG） ----------
 async function readGPS(file) {
   try {
-    const buf = await file.slice(0, 256 * 1024).arrayBuffer();
-    const v = new DataView(buf);
+    const v = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
     if (v.getUint16(0) !== 0xFFD8) return null;
     let off = 2;
     while (off + 4 < v.byteLength) {
@@ -477,8 +660,7 @@ async function readGPS(file) {
   return null;
 }
 function parseTiff(v, t) {
-  const le = v.getUint16(t) === 0x4949;
-  const u16 = (o) => v.getUint16(o, le), u32 = (o) => v.getUint32(o, le);
+  const le = v.getUint16(t) === 0x4949, u16 = (o) => v.getUint16(o, le), u32 = (o) => v.getUint32(o, le);
   const ifd0 = t + u32(t + 4);
   let gps = 0;
   for (let i = 0, n = u16(ifd0); i < n; i++) { const e = ifd0 + 2 + i * 12; if (u16(e) === 0x8825) gps = t + u32(e + 8); }
@@ -487,168 +669,209 @@ function parseTiff(v, t) {
   for (let i = 0, n = u16(gps); i < n; i++) {
     const e = gps + 2 + i * 12, tag = u16(e);
     if (tag === 1 || tag === 3) tags[tag] = String.fromCharCode(v.getUint8(e + 8));
-    if (tag === 2 || tag === 4) {
-      const o = t + u32(e + 8), r = (k) => u32(o + k * 8) / (u32(o + k * 8 + 4) || 1);
-      tags[tag] = r(0) + r(1) / 60 + r(2) / 3600;
-    }
+    if (tag === 2 || tag === 4) { const o = t + u32(e + 8), r = (k) => u32(o + k * 8) / (u32(o + k * 8 + 4) || 1); tags[tag] = r(0) + r(1) / 60 + r(2) / 3600; }
   }
   if (tags[2] == null || tags[4] == null) return null;
   const lat = tags[2] * (tags[1] === 'S' ? -1 : 1), lon = tags[4] * (tags[3] === 'W' ? -1 : 1);
-  if (!lat && !lon) return null;
-  return { lat, lon };
-}
-
-// 经纬度 → 省份
-function inRing(ring, x, y) {
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i], [xj, yj] = ring[j];
-    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
-function locate(lon, lat) {
-  for (const p of PROVS) {
-    let c = false;
-    for (const poly of p.polygons) for (const ring of poly) if (inRing(ring, lon, lat)) c = !c;
-    if (c) return p.id;
-  }
-  // 海岸线附近：低精度边界可能把海边的点判到界外，取 0.5° 内最近的省
-  let best = null, bd = 0.25;
-  for (const p of PROVS) for (const poly of p.polygons) for (const ring of poly) for (const [x, y] of ring) {
-    const d = (x - lon) ** 2 + (y - lat) ** 2;
-    if (d < bd) { bd = d; best = p.id; }
-  }
-  return best;
+  return (lat || lon) ? { lat, lon } : null;
 }
 
 // ---------- 导入 ----------
 async function shrink(file) {
   let src;
   try { src = await createImageBitmap(file); }
-  catch (e) {
-    src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
-  }
-  const max = 640, sc = Math.min(1, max / Math.max(src.width, src.height));
+  catch (e) { src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); }); }
+  const sc = Math.min(1, 640 / Math.max(src.width, src.height));
   const c = document.createElement('canvas');
   c.width = Math.round(src.width * sc); c.height = Math.round(src.height * sc);
   c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
   return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
 }
-async function importFiles(files, forcedProv) {
+async function importFiles(files, forced) {
   if (!files.length) return;
   toast('正在处理 ' + files.length + ' 张照片…', 0);
+  const L = level();
   let placed = 0, pending = 0, failed = 0;
   const touched = new Set();
   for (const f of files) {
     try {
-      const gps = forcedProv ? null : await readGPS(f);
-      const prov = forcedProv || (gps ? locate(gps.lon, gps.lat) : null);
-      const blob = await shrink(f);
-      const ph = { id: uid(), mapId: current.id, prov: prov || null, blob, lat: gps && gps.lat, lon: gps && gps.lon, added: Date.now() };
+      const gps = await readGPS(f);
+      let loc = gps ? locate(gps.lon, gps.lat) : null;
+      // 手动指定的单元优先；如果 GPS 本来就落在里面，保留更细的区县信息
+      if (forced && (!loc || keyAt(loc, forced.level) !== forced.key)) loc = codesOf(forced);
+      const ph = { id: uid(), mapId: current.id, blob: await shrink(f), lat: gps ? gps.lat : null, lon: gps ? gps.lon : null, prov: null, city: null, county: null, added: Date.now(), ...(loc || {}) };
       allPhotos.push(ph);
       await dbPut('photos', ph);
-      if (prov) { placed++; touched.add(prov); } else pending++;
+      const k = keyAt(ph, L);
+      if (k) { placed++; touched.add(k); } else pending++;
     } catch (e) { failed++; }
   }
   layoutCache.clear();
   render();
   const parts = [];
-  if (placed) parts.push(placed + ' 张已放入 ' + touched.size + ' 个省');
-  if (pending) parts.push(pending + ' 张没有位置信息，放在“待分配”');
-  if (failed) parts.push(failed + ' 张无法读取（HEIC 格式请先转成 JPEG）');
+  if (placed) parts.push(placed + ' 张已放入 ' + touched.size + ' 个' + LEVELS[L].name);
+  if (pending) parts.push(pending + ' 张放在“待分配”');
+  if (failed) parts.push(failed + ' 张无法读取（HEIC 请先转成 JPEG）');
   toast(parts.join('；') || '没有可用的照片');
-  if (forcedProv && $('provDlg').open) fillProvince(forcedProv);
+  if ($('provDlg').open) fillDialog();
 }
 $('addAuto').onclick = () => $('fileAuto').click();
 $('fileAuto').onchange = (e) => { const fs = [...e.target.files]; e.target.value = ''; importFiles(fs, null); };
 
 // ---------- 待分配 ----------
-function provOptions(sel) {
+function fillSelect(sel, list, emptyLabel) {
   sel.textContent = '';
-  for (const p of PROVS) { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o); }
+  if (emptyLabel) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+  for (const u of list) { const o = document.createElement('option'); o.value = u.key; o.textContent = u.name + (u.old ? '（旧）' : ''); sel.appendChild(o); }
 }
-provOptions($('pendingProv'));
+function syncPendingSelects() {
+  const L = level();
+  const p = $('pendProv').value || units.p[0].key;
+  const cities = childrenOf('c', p);
+  const keepCity = $('pendCity').value;
+  fillSelect($('pendCity'), cities, L === 'p' ? '（不细分到市）' : null);
+  if (cities.some(c => c.key === keepCity)) $('pendCity').value = keepCity;
+  $('pendCity').hidden = cities.length <= 1 && L === 'p';
+  const cityKey = $('pendCity').value;
+  const counties = cityKey ? units.x.filter(u => u.city === cityKey) : [];
+  fillSelect($('pendCounty'), counties, L === 'x' ? null : '（不细分到区县）');
+  $('pendCounty').hidden = !cityKey;
+}
+fillSelect($('pendProv'), units.p, null);
+$('pendProv').onchange = () => { $('pendCity').value = ''; syncPendingSelects(); };
+$('pendCity').onchange = syncPendingSelects;
+const pendingPhotos = () => realPhotos().filter(ph => !keyAt(ph, level()));
 function renderPending() {
-  const list = current ? pendingPhotos() : [];
+  const list = pendingPhotos();
   $('pending').hidden = !list.length;
-  $('pendingCount').textContent = list.length + ' 张';
+  if (!list.length) return;
+  const L = level();
+  $('pendingCount').textContent = list.length + ' 张' + (L === 'p' ? '' : '（没有定位，或只指定到了上一级）');
   const box = $('pendingThumbs'); box.textContent = '';
   for (const ph of list) box.appendChild(thumbEl(ph));
+  syncPendingSelects();
 }
 $('pendingAssign').onclick = async () => {
-  const pid = $('pendingProv').value;
-  for (const ph of pendingPhotos()) { ph.prov = pid; await dbPut('photos', ph); }
-  layoutCache.clear(); render(); toast('已放入' + byId[pid].name);
+  const unit = $('pendCounty').value ? byKey.x.get($('pendCounty').value) : $('pendCity').value ? byKey.c.get($('pendCity').value) : byKey.p.get($('pendProv').value);
+  if (!unit) return;
+  for (const ph of pendingPhotos()) { Object.assign(ph, codesOf(unit)); await dbPut('photos', ph); }
+  layoutCache.clear(); render(); toast('已放入' + fullName(unit));
 };
-$('pendingDrop').onclick = async () => {
-  for (const ph of pendingPhotos()) await removePhoto(ph, true);
-  render();
-};
+$('pendingDrop').onclick = async () => { for (const ph of pendingPhotos()) await removePhoto(ph); render(); };
 
 function thumbEl(ph) {
   const d = document.createElement('div'); d.className = 'thumb';
   const im = document.createElement('img'); im.src = thumbURL(ph); im.alt = ''; d.appendChild(im);
   if (!ph.canvas) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = '删除'; b.setAttribute('aria-label', '删除这张照片');
-    b.onclick = async () => { const pid = ph.prov; await removePhoto(ph); render(); if (pid && $('provDlg').open) fillProvince(pid); };
+    b.onclick = async () => { await removePhoto(ph); render(); if ($('provDlg').open) fillDialog(); };
     d.appendChild(b);
   }
   return d;
 }
-async function removePhoto(ph, quiet) {
+async function removePhoto(ph) {
   allPhotos = allPhotos.filter(p => p.id !== ph.id);
   await dbDel('photos', ph.id);
   if (urlCache.has(ph.id)) { URL.revokeObjectURL(urlCache.get(ph.id)); urlCache.delete(ph.id); }
   imgCache.delete(ph.id); layoutCache.clear();
 }
 
-// ---------- 单省详情 ----------
-let openProv = null;
-function openProvince(pid) {
-  openProv = pid;
+// ---------- 省内视图 ----------
+let dlgProv = null, dlgSel = null, dlgPaths = [];
+function openDialog(provKey, unitKey) {
+  dlgProv = provKey;
+  const L = level();
+  if (L === 'p') dlgSel = provKey;
+  else if (unitKey) dlgSel = unitKey;
+  else {
+    const kids = childrenOf(L, provKey), lit = litUnits(L);
+    dlgSel = (kids.find(u => lit.has(u.key)) || kids[0] || {}).key || null;
+  }
   if (!$('provDlg').open) $('provDlg').showModal();
-  fillProvince(pid);
+  fillDialog();
 }
-function fillProvince(pid) {
+function fillDialog() {
   readColors();
-  const p = byId[pid];
-  const real = mapPhotos().some(x => x.prov);
-  const phs = real ? provPhotos(pid) : DEMO.filter(d => d.prov === pid);
+  const L = level(), p = byKey.p.get(dlgProv);
+  if (!p) return;
+  const kids = L === 'p' ? [p] : childrenOf(L, p.key);
+  if (!kids.some(u => u.key === dlgSel)) dlgSel = kids[0] ? kids[0].key : null;
+  const lit = litUnits(L);
   $('provName').textContent = p.name;
-  $('provCount').textContent = real ? (phs.length ? phs.length + ' 张照片' : '还没有照片') : '示例';
+  $('provCount').textContent = L === 'p'
+    ? (hasReal() ? photosIn(p).length + ' 张照片' : '示例')
+    : '已点亮 ' + kids.filter(u => lit.has(u.key)).length + ' / ' + kids.length + ' 个' + LEVELS[L].name + (hasReal() ? '' : '（示例）');
+
   const c = $('provCanvas');
   const cssW = c.clientWidth || 600, bw = p.bbox.x1 - p.bbox.x0, bh = p.bbox.y1 - p.bbox.y0;
-  const cssH = Math.round(Math.min(cssW * bh / bw, window.innerHeight * 0.5) );
+  const cssH = Math.round(Math.min(cssW * bh / bw, window.innerHeight * 0.45));
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  c.width = cssW * dpr; c.height = cssH * dpr; c.style.height = cssH + 'px';
+  c.width = Math.round(cssW * dpr); c.height = Math.round(cssH * dpr); c.style.height = cssH + 'px';
   const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = colors.bg; ctx.fillRect(0, 0, cssW, cssH);
-  const pad = 12, s = Math.min((cssW - pad * 2) / bw, (cssH - pad * 2) / bh);
-  const ox = (cssW - bw * s) / 2, oy = (cssH - bh * s) / 2;
-  drawProvince(ctx, p, (x, y) => [ox + (x - p.bbox.x0) * s, oy + (y - p.bbox.y0) * s], phs, seedOf(pid), 2);
-  const box = $('provThumbs'); box.textContent = '';
+  dlgPaths = drawLevel(ctx, cssW, cssH, 10, p.bbox, L, p.key, L === 'p' ? null : dlgSel);
+
+  // 单元列表：地级按名称，区县按所属地级分组
+  const list = $('unitList'); list.textContent = '';
+  list.hidden = L === 'p';
+  if (L !== 'p') {
+    const groups = new Map();
+    for (const u of kids) { const g = L === 'x' ? u.city : 'all'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(u); }
+    for (const [g, us] of groups) {
+      const wrap = document.createElement('div'); wrap.className = 'group';
+      if (L === 'x' && groups.size > 1) { const lab = document.createElement('div'); lab.className = 'group-label'; lab.textContent = (byKey.c.get(g) || {}).name || ''; wrap.appendChild(lab); }
+      const row = document.createElement('div'); row.className = 'chips';
+      for (const u of us) {
+        const b = document.createElement('button'); b.type = 'button';
+        b.className = 'chip' + (lit.has(u.key) ? ' on' : '') + (u.key === dlgSel ? ' sel' : '');
+        b.textContent = u.name;
+        if (u.old) { const o = document.createElement('span'); o.className = 'old'; o.textContent = '旧'; b.appendChild(o); }
+        const n = hasReal() ? photosIn(u).length : 0;
+        if (n) { const s = document.createElement('small'); s.textContent = n; b.appendChild(s); }
+        b.onclick = () => { dlgSel = u.key; fillDialog(); };
+        row.appendChild(b);
+      }
+      wrap.appendChild(row); list.appendChild(wrap);
+    }
+  }
+
+  const u = byKey[L].get(dlgSel);
+  const phs = u ? photosIn(u) : [];
+  const real = hasReal();
+  $('unitName').textContent = u ? (L === 'p' ? u.name : fullName(u)) : '';
+  if (u) {
+    const sm = document.createElement('small');
+    sm.textContent = (real ? (phs.length ? phs.length + ' 张照片' : '还没有照片') : '示例') + (u.old ? ' · 旧区划：2017 年后已拆分重划' : '');
+    $('unitName').appendChild(sm);
+  }
+  const box = $('unitThumbs'); box.textContent = '';
   for (const ph of phs) box.appendChild(thumbEl(ph));
-  $('provShuffle').disabled = phs.length < 2 || !real;
-  $('provClear').disabled = !real || !phs.length;
-  $('provClear').textContent = '清空';
-  // 图片解码是异步的，稍后再画一次
-  if (phs.some(ph => !imageFor(ph))) setTimeout(() => { if ($('provDlg').open && openProv === pid) fillProvince(pid); }, 300);
+  $('unitAdd').disabled = !u;
+  $('unitShuffle').disabled = !real || phs.length < 2;
+  $('unitClear').disabled = !real || !phs.length;
+  $('unitClear').textContent = '清空';
 }
+$('provCanvas').addEventListener('click', (ev) => {
+  if (level() === 'p') return;
+  const c = $('provCanvas'), h = hitTest(c, c.getContext('2d'), dlgPaths, ev);
+  if (h) { dlgSel = h.u.key; fillDialog(); }
+});
 $('provClose').onclick = () => $('provDlg').close();
-$('provAdd').onclick = () => $('fileProv').click();
-$('fileProv').onchange = (e) => { const fs = [...e.target.files]; e.target.value = ''; importFiles(fs, openProv); };
-$('provShuffle').onclick = async () => {
+$('unitAdd').onclick = () => $('fileUnit').click();
+$('fileUnit').onchange = (e) => { const fs = [...e.target.files]; e.target.value = ''; const u = byKey[level()].get(dlgSel); if (u) importFiles(fs, u); };
+$('unitShuffle').onclick = async () => {
+  const u = byKey[level()].get(dlgSel); if (!u) return;
   current.seeds = current.seeds || {};
-  current.seeds[openProv] = Math.floor(Math.random() * 1e9) + 2;
+  current.seeds[u.level + ':' + u.key] = Math.floor(Math.random() * 1e9) + 2;
   await dbPut('maps', current);
-  fillProvince(openProv); render();
+  render(); fillDialog();
 };
-$('provClear').onclick = async () => {
-  const b = $('provClear');
+$('unitClear').onclick = async () => {
+  const b = $('unitClear');
   if (b.textContent === '清空') { b.textContent = '确认清空？'; return; }
-  for (const ph of provPhotos(openProv)) await removePhoto(ph, true);
-  render(); fillProvince(openProv);
+  const u = byKey[level()].get(dlgSel); if (!u) return;
+  for (const ph of photosIn(u)) await removePhoto(ph);
+  render(); fillDialog();
 };
 
 // ---------- 多张地图 ----------
@@ -664,18 +887,14 @@ $('mapSelect').onchange = (e) => {
   layoutCache.clear(); render();
 };
 let nameMode = null;
-function askName(mode, initial) {
-  nameMode = mode; $('nameRow').hidden = false; $('nameInput').value = initial || ''; $('nameInput').focus();
-}
+function askName(mode, initial) { nameMode = mode; $('nameRow').hidden = false; $('nameInput').value = initial || ''; $('nameInput').focus(); }
 $('newMap').onclick = () => askName('new', '');
 $('renameMap').onclick = () => askName('rename', current.name);
 $('nameCancel').onclick = () => { $('nameRow').hidden = true; };
 $('nameOk').onclick = async () => {
   const name = $('nameInput').value.trim() || '未命名地图';
-  if (nameMode === 'new') {
-    current = { id: uid(), name, seeds: {}, created: Date.now() };
-    maps.push(current);
-  } else current.name = name;
+  if (nameMode === 'new') { current = { id: uid(), name, seeds: {}, level: level(), created: Date.now() }; maps.push(current); }
+  else current.name = name;
   await dbPut('maps', current);
   $('nameRow').hidden = true;
   renderMapSelect(); render();
@@ -684,39 +903,36 @@ $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('na
 $('deleteMap').onclick = async () => {
   const b = $('deleteMap');
   if (b.textContent === '删除') { b.textContent = '确认删除“' + current.name + '”？'; return; }
-  for (const ph of mapPhotos()) await removePhoto(ph, true);
+  for (const ph of realPhotos()) await removePhoto(ph);
   await dbDel('maps', current.id);
   maps = maps.filter(m => m.id !== current.id);
-  if (!maps.length) { const m = { id: uid(), name: '我的地图', seeds: {}, created: Date.now() }; maps.push(m); await dbPut('maps', m); }
+  if (!maps.length) { const m = { id: uid(), name: '我的地图', seeds: {}, level: 'p', created: Date.now() }; maps.push(m); await dbPut('maps', m); }
   current = maps[0];
   renderMapSelect(); render();
 };
 
-// ---------- 导出分享图 ----------
+// ---------- 分享图 ----------
 $('exportBtn').onclick = () => {
   readColors();
-  const W = 1500, H = 1500;
+  const W = 1500, H = 1500, L = level();
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const ctx = c.getContext('2d');
   ctx.fillStyle = colors.surface; ctx.fillRect(0, 0, W, H);
-  const real = mapPhotos().some(p => p.prov);
-  const photosFor = real ? (pid) => provPhotos(pid) : (pid) => DEMO.filter(d => d.prov === pid);
   ctx.save(); ctx.translate(0, 220);
-  drawWorld(ctx, W, H - 300, 60, photosFor, 2);
+  drawLevel(ctx, W, H - 300, 50, world, L, null, null);
   ctx.restore();
-  const lit = real ? PROVS.filter(p => provPhotos(p.id).length).length : 0;
-  ctx.fillStyle = colors.ink;
-  ctx.font = '900 76px ' + getComputedStyle(document.documentElement).getPropertyValue('--font-display');
+  const lit = hasReal() ? litUnits(L).size : 0;
+  const display = getComputedStyle(document.documentElement).getPropertyValue('--font-display');
+  ctx.fillStyle = colors.ink; ctx.font = '900 76px ' + display;
   ctx.fillText(current.name, 80, 150);
-  ctx.save(); ctx.translate(W - 260, 110); ctx.rotate(-0.07);
-  ctx.strokeStyle = colors.seal; ctx.lineWidth = 6; ctx.strokeRect(-20, -70, 220, 130);
+  ctx.save(); ctx.translate(W - 300, 110); ctx.rotate(-0.07);
+  ctx.strokeStyle = colors.seal; ctx.lineWidth = 6; ctx.strokeRect(-30, -72, 290, 134);
   ctx.fillStyle = colors.seal; ctx.textAlign = 'center';
-  ctx.font = '900 64px ' + getComputedStyle(document.documentElement).getPropertyValue('--font-display');
-  ctx.fillText(lit + '/34', 90, 5);
-  ctx.font = '700 26px sans-serif'; ctx.fillText('已 点 亮', 90, 45);
+  ctx.font = '900 58px ' + display; ctx.fillText(lit + '/' + units[L].length, 115, 2);
+  ctx.font = '700 26px sans-serif'; ctx.fillText('已点亮 · ' + LEVELS[L].name, 115, 44);
   ctx.restore();
   ctx.fillStyle = colors.muted; ctx.font = '26px sans-serif';
-  ctx.fillText(real ? '足迹拼图' : '足迹拼图 · 示例', 80, H - 50);
+  ctx.fillText(hasReal() ? '足迹拼图' : '足迹拼图 · 示例', 80, H - 50);
   $('exportImg').src = c.toDataURL('image/png');
   $('exportDlg').showModal();
 };
@@ -730,15 +946,24 @@ function toast(msg, ms = 3600) {
 }
 let resizeTimer = null;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 120); });
-try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render); } catch (e) { /* 旧浏览器 */ }
-new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', scheduleRender); } catch (e) { /* 旧浏览器 */ }
+new MutationObserver(scheduleRender).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 (async function boot() {
-  if (!PROVS.length) { toast('地图数据没有加载成功：缺少 china-provinces.js', 0); return; }
   db = await openDB();
   maps = (await dbGetAll('maps')) || [];
   allPhotos = (await dbGetAll('photos')) || [];
-  if (!maps.length) { const m = { id: uid(), name: '我的地图', seeds: {}, created: Date.now() }; maps.push(m); await dbPut('maps', m); }
+  // 兼容旧版（只有省份、省代码为 6 位）：有 GPS 的重新定位到区县
+  for (const ph of allPhotos) {
+    let changed = false;
+    if (ph.prov && ph.prov.length === 6) { ph.prov = ph.prov.slice(0, 2); changed = true; }
+    if (ph.county === undefined) {
+      const loc = ph.lat != null ? locate(ph.lon, ph.lat) : null;
+      Object.assign(ph, loc || { city: null, county: null }); changed = true;
+    }
+    if (changed) dbPut('photos', ph);
+  }
+  if (!maps.length) { const m = { id: uid(), name: '我的地图', seeds: {}, level: 'p', created: Date.now() }; maps.push(m); await dbPut('maps', m); }
   let saved = null; try { saved = localStorage.getItem('zuji-current'); } catch (e) { /* 忽略 */ }
   current = maps.find(m => m.id === saved) || maps[0];
   renderMapSelect();
