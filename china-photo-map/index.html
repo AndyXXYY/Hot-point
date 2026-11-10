@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>足迹拼图</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap">
+<style>
+/* 布局：单列工具页。地图是主角，上方是标题与印章计数，下方是操作条与 34 个省份签。 */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #1d2733;
+  --muted: #5b6876;
+  --land: #d6dde5;
+  --land-edge: #ffffff;
+  --seal: #c23a2f;
+  --accent: #1f5f8b;
+  --accent-ink: #ffffff;
+  --hairline: #d3d9e0;
+  --font-display: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151b; --surface: #19212a; --ink: #e5eaef; --muted: #93a0ad;
+    --land: #27313c; --land-edge: #10151b; --seal: #e0564b; --accent: #6aa8d4;
+    --accent-ink: #0d141b; --hairline: #2b3540; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151b; --surface: #19212a; --ink: #e5eaef; --muted: #93a0ad;
+  --land: #27313c; --land-edge: #10151b; --seal: #e0564b; --accent: #6aa8d4;
+  --accent-ink: #0d141b; --hairline: #2b3540; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+h1 { font-family: var(--font-display); font-weight: 900; font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: 0.04em; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+.seal {
+  font-family: var(--font-display); color: var(--seal); border: 2.5px solid var(--seal); border-radius: 6px;
+  padding: 4px 12px; transform: rotate(-4deg); text-align: center; line-height: 1.2; flex-shrink: 0;
+}
+.seal b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+.seal span { font-size: 12px; letter-spacing: 0.2em; }
+.mapbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+select, button { font: inherit; font-size: 14px; color: var(--ink); }
+select { background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 10px; max-width: 100%; }
+button { cursor: pointer; background: transparent; border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 12px; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.danger { color: var(--seal); border-color: var(--seal); }
+button:focus-visible, select:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stage { position: relative; background: var(--surface); border-radius: var(--radius); overflow: hidden; }
+#map { display: block; width: 100%; height: auto; touch-action: manipulation; cursor: pointer; }
+.demo-tag { position: absolute; left: 12px; top: 12px; font-size: 12px; background: var(--bg); color: var(--muted); padding: 3px 10px; border-radius: 999px; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.actions .hint { color: var(--muted); font-size: 13px; flex: 1 1 220px; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--hairline); border-radius: 999px; padding: 3px 11px; font-size: 13px; background: transparent; }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip small { font-variant-numeric: tabular-nums; opacity: 0.7; margin-left: 4px; }
+.panel { background: var(--surface); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { font-family: var(--font-display); font-size: 20px; margin: 0; }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+.thumb { position: relative; aspect-ratio: 1; max-width: 100%; border-radius: 6px; overflow: hidden; background: var(--land); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb button { position: absolute; right: 3px; top: 3px; padding: 0 6px; font-size: 12px; line-height: 20px; background: var(--surface); border: 0; border-radius: 4px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+dialog { border: 0; border-radius: 14px; padding: 0; width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); background: var(--surface); color: var(--ink); }
+dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.dlg { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.dlg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.dlg-head h2 { font-family: var(--font-display); font-size: 24px; margin: 0; }
+.dlg-head .count { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+#provCanvas { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 8px; }
+#exportImg { width: 100%; height: auto; border-radius: 8px; display: block; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: 14px; z-index: 20; max-width: calc(100vw - 32px); }
+footer { color: var(--muted); font-size: 12px; }
+@media (max-width: 520px) { h1 { font-size: 24px; } .seal b { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>足迹拼图</h1>
+      <p class="sub">选一次旅行的照片，按拍摄地点自动拼进省份轮廓。照片只保存在这台设备的浏览器里。</p>
+    </div>
+    <div class="seal" aria-live="polite"><b id="litCount">0 / 34</b><span>已点亮</span></div>
+  </header>
+
+  <div class="mapbar">
+    <label for="mapSelect" class="sub" style="margin:0">地图</label>
+    <select id="mapSelect"></select>
+    <button id="newMap" type="button">新建地图</button>
+    <button id="renameMap" type="button">改名</button>
+    <button id="deleteMap" type="button" class="danger">删除</button>
+  </div>
+  <div class="row" id="nameRow" hidden>
+    <input id="nameInput" type="text" maxlength="20" placeholder="例如：爸妈的地图" style="font:inherit;padding:7px 10px;border:1px solid var(--hairline);border-radius:8px;background:var(--surface);color:var(--ink);flex:1 1 180px;min-width:0">
+    <button id="nameOk" type="button" class="primary">确定</button>
+    <button id="nameCancel" type="button">取消</button>
+  </div>
+
+  <div class="stage">
+    <canvas id="map" aria-label="中国省级行政区照片拼图地图"></canvas>
+    <span class="demo-tag" id="demoTag" hidden>示例效果 · 添加照片后显示你的地图</span>
+    <span class="tip" id="tip" hidden></span>
+  </div>
+
+  <div class="actions">
+    <button id="addAuto" type="button" class="primary">添加照片（按位置自动分省）</button>
+    <button id="exportBtn" type="button">生成分享图</button>
+    <span class="hint">没有定位信息的照片会放进“待分配”，再手动选省份。点地图上的省份可以单独添加、重排或删除。</span>
+  </div>
+  <input id="fileAuto" type="file" accept="image/*" multiple hidden>
+  <input id="fileProv" type="file" accept="image/*" multiple hidden>
+
+  <section class="panel" id="pending" hidden>
+    <h2>待分配 <span class="sub" id="pendingCount"></span></h2>
+    <div class="thumbs" id="pendingThumbs"></div>
+    <div class="row">
+      <label for="pendingProv" class="sub" style="margin:0">放入</label>
+      <select id="pendingProv"></select>
+      <button id="pendingAssign" type="button" class="primary">全部放入</button>
+      <button id="pendingDrop" type="button">全部丢弃</button>
+    </div>
+  </section>
+
+  <section>
+    <p class="sub" style="margin:0 0 8px">34 个省级行政区</p>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <footer>省界数据来自 Apache ECharts 4.9.0 内置地图（示意，未经审图）。南海诸岛以示意框表示。</footer>
+</div>
+
+<dialog id="provDlg">
+  <div class="dlg">
+    <div class="dlg-head"><h2 id="provName"></h2><span class="count" id="provCount"></span></div>
+    <canvas id="provCanvas"></canvas>
+    <div class="row">
+      <button id="provAdd" type="button" class="primary">添加照片</button>
+      <button id="provShuffle" type="button">重排</button>
+      <button id="provClear" type="button" class="danger">清空</button>
+      <span style="flex:1"></span>
+      <button id="provClose" type="button">关闭</button>
+    </div>
+    <div class="thumbs" id="provThumbs"></div>
+  </div>
+</dialog>
+
+<dialog id="exportDlg">
+  <div class="dlg">
+    <div class="dlg-head"><h2>分享图</h2><span class="count">手机长按图片保存，电脑右键“图片另存为”</span></div>
+    <img id="exportImg" alt="足迹拼图分享图">
+    <div class="row"><span style="flex:1"></span><button id="exportClose" type="button">关闭</button></div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="china-provinces.js"></script>
+<script>
+(() => {
+'use strict';
+const PROVS = window.CHINA_PROVINCES || [];
+const NANHAI = window.CHINA_NANHAI || [];
+const $ = (id) => document.getElementById(id);
+
+// ---------- 投影：等距圆柱 + 纬度余弦压缩，省级尺度足够 ----------
+const K = Math.cos(35 * Math.PI / 180);
+const proj = ([lon, lat]) => [lon * K, -lat];
+let world = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+for (const p of PROVS) {
+  p.bbox = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  p.proj = p.polygons.map(poly => poly.map(ring => ring.map(pt => {
+    const q = proj(pt);
+    p.bbox.x0 = Math.min(p.bbox.x0, q[0]); p.bbox.y0 = Math.min(p.bbox.y0, q[1]);
+    p.bbox.x1 = Math.max(p.bbox.x1, q[0]); p.bbox.y1 = Math.max(p.bbox.y1, q[1]);
+    return q;
+  })));
+  for (const k of ['x0', 'y0']) world[k] = Math.min(world[k], p.bbox[k]);
+  for (const k of ['x1', 'y1']) world[k] = Math.max(world[k], p.bbox[k]);
+}
+const nanhaiProj = NANHAI.map(r => r.map(proj));
+for (const r of nanhaiProj) for (const [x, y] of r) {
+  world.x0 = Math.min(world.x0, x); world.x1 = Math.max(world.x1, x);
+  world.y0 = Math.min(world.y0, y); world.y1 = Math.max(world.y1, y);
+}
+const byId = Object.fromEntries(PROVS.map(p => [p.id, p]));
+
+function buildPath(p, tx) {
+  const path = new Path2D();
+  for (const poly of p.proj) for (const ring of poly) {
+    ring.forEach(([x, y], i) => { const [a, b] = tx(x, y); i ? path.lineTo(a, b) : path.moveTo(a, b); });
+    path.closePath();
+  }
+  return path;
+}
+
+// ---------- 随机数 ----------
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function shuffle(arr, r) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+
+// ---------- 拼图布局：在省份外接框里铺网格，只保留落在轮廓内的格子 ----------
+const testCanvas = document.createElement('canvas');
+const testCtx = testCanvas.getContext('2d');
+const layoutCache = new Map();
+function layout(p, n, seed) {
+  const key = p.id + ':' + n + ':' + seed;
+  if (layoutCache.has(key)) return layoutCache.get(key);
+  const bw = p.bbox.x1 - p.bbox.x0, bh = p.bbox.y1 - p.bbox.y0;
+  const S = 600 / Math.max(bw, bh), W = bw * S, H = bh * S;
+  const path = buildPath(p, (x, y) => [(x - p.bbox.x0) * S, (y - p.bbox.y0) * S]);
+  const r = rng(seed * 7919 + n);
+  const ox = r(), oy = r();
+  const inside = (x, y) => testCtx.isPointInPath(path, x, y, 'evenodd');
+  const grid = (s) => {
+    const cells = [];
+    for (let y = -oy * s; y < H; y += s) for (let x = -ox * s; x < W; x += s) {
+      const pts = [[x + s / 2, y + s / 2], [x + s * 0.15, y + s * 0.15], [x + s * 0.85, y + s * 0.15], [x + s * 0.15, y + s * 0.85], [x + s * 0.85, y + s * 0.85]];
+      if (pts.some(([a, b]) => inside(a, b))) cells.push({ x, y, s });
+    }
+    return cells;
+  };
+  let cells;
+  if (n === 1) cells = [{ x: 0, y: 0, s: Math.max(W, H) }];
+  else {
+    let lo = 3, hi = Math.max(W, H), best = grid(lo);
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2, c = grid(mid);
+      if (c.length >= n) { best = c; lo = mid; } else hi = mid;
+    }
+    cells = best;
+  }
+  const order = shuffle([...Array(n).keys()], r);
+  shuffle(cells, r);
+  const out = cells.map((c, i) => ({
+    x: c.x / W, y: c.y / H, w: c.s / W, h: c.s / H,
+    photo: i < n ? order[i] : Math.floor(r() * n),
+  }));
+  layoutCache.set(key, out);
+  return out;
+}
+
+// ---------- 主题色 ----------
+let colors = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['bg', 'surface', 'ink', 'muted', 'land', 'land-edge', 'seal', 'accent']) colors[k] = cs.getPropertyValue('--' + k).trim();
+}
+
+// ---------- 绘制一个省 ----------
+function drawCover(ctx, img, x, y, w, h) {
+  const iw = img.width, ih = img.height;
+  const sc = Math.max(w / iw, h / ih);
+  const sw = w / sc, sh = h / sc;
+  ctx.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, x, y, w, h);
+}
+function drawProvince(ctx, p, tx, photos, seed, gap) {
+  const path = buildPath(p, tx);
+  ctx.fillStyle = colors.land;
+  ctx.fill(path, 'evenodd');
+  const imgs = photos.map(ph => imageFor(ph)).filter(Boolean);
+  if (imgs.length) {
+    const [ax, ay] = tx(p.bbox.x0, p.bbox.y0), [bx, by] = tx(p.bbox.x1, p.bbox.y1);
+    const W = bx - ax, H = by - ay;
+    ctx.save();
+    ctx.clip(path, 'evenodd');
+    ctx.fillStyle = colors.surface;
+    ctx.fillRect(ax, ay, W, H);
+    for (const c of layout(p, imgs.length, seed)) {
+      const g = imgs.length === 1 ? 0 : gap;
+      drawCover(ctx, imgs[c.photo], ax + c.x * W + g / 2, ay + c.y * H + g / 2, c.w * W - g, c.h * H - g);
+    }
+    ctx.restore();
+  }
+  return path;
+}
+
+// ---------- 存储（IndexedDB，失败则只存内存） ----------
+let db = null;
+function openDB() {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open('zuji-pintu', 1);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        d.createObjectStore('maps', { keyPath: 'id' });
+        d.createObjectStore('photos', { keyPath: 'id' }).createIndex('mapId', 'mapId');
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (e) { resolve(null); }
+  });
+}
+function idb(store, mode, fn) {
+  if (!db) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      const t = db.transaction(store, mode), s = t.objectStore(store);
+      const out = fn(s);
+      t.oncomplete = () => resolve(out && out.result !== undefined ? out.result : null);
+      t.onerror = () => resolve(null);
+    } catch (e) { resolve(null); }
+  });
+}
+const dbGetAll = (store) => idb(store, 'readonly', s => s.getAll());
+const dbPut = (store, v) => idb(store, 'readwrite', s => s.put(v));
+const dbDel = (store, k) => idb(store, 'readwrite', s => s.delete(k));
+
+// ---------- 状态 ----------
+let maps = [], allPhotos = [], current = null;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const mapPhotos = () => allPhotos.filter(p => p.mapId === current.id);
+const provPhotos = (pid) => mapPhotos().filter(p => p.prov === pid);
+const pendingPhotos = () => mapPhotos().filter(p => !p.prov);
+
+const imgCache = new Map();
+function imageFor(ph) {
+  if (ph.canvas) return ph.canvas;
+  const c = imgCache.get(ph.id);
+  if (c && c.ready) return c.img;
+  if (!c) {
+    const entry = { ready: false, img: null };
+    imgCache.set(ph.id, entry);
+    createImageBitmap(ph.blob).then(bmp => { entry.img = bmp; entry.ready = true; scheduleRender(); }).catch(() => {});
+  }
+  return null;
+}
+const urlCache = new Map();
+function thumbURL(ph) {
+  if (ph.canvas) return ph.canvas.toDataURL('image/jpeg', 0.7);
+  if (!urlCache.has(ph.id)) urlCache.set(ph.id, URL.createObjectURL(ph.blob));
+  return urlCache.get(ph.id);
+}
+
+// ---------- 示例数据（仅在地图为空时展示，不保存） ----------
+function makeDemo() {
+  const palettes = [['#2f6f8f', '#9fd0d9'], ['#7a8b3b', '#e3d58a'], ['#b5543b', '#f0b67f'], ['#3d4f7d', '#c9a7d6'], ['#2e7d5b', '#bfe3b4'], ['#8a5a44', '#e8cfa9']];
+  const demo = [];
+  const pick = { '110000': 2, '310000': 2, '330000': 6, '510000': 8, '530000': 10, '540000': 5, '610000': 4, '440000': 6, '460000': 3, '350000': 4, '650000': 7 };
+  let k = 0;
+  for (const [pid, n] of Object.entries(pick)) for (let i = 0; i < n; i++, k++) {
+    const c = document.createElement('canvas'); c.width = c.height = 120;
+    const g = c.getContext('2d'), [a, b] = palettes[k % palettes.length];
+    const gr = g.createLinearGradient(0, 0, 120, 120); gr.addColorStop(0, a); gr.addColorStop(1, b);
+    g.fillStyle = gr; g.fillRect(0, 0, 120, 120);
+    g.fillStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.arc(30 + (k * 37) % 60, 40, 18, 0, 7); g.fill();
+    demo.push({ id: 'demo' + k, prov: pid, canvas: c });
+  }
+  return demo;
+}
+const DEMO = makeDemo();
+
+// ---------- 主地图渲染 ----------
+const mapCanvas = $('map'), mctx = mapCanvas.getContext('2d');
+let screenPaths = [], renderQueued = false, mapTx = null;
+function scheduleRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(() => { renderQueued = false; render(); }); } }
+
+function fitTx(width, height, pad) {
+  const ww = world.x1 - world.x0, wh = world.y1 - world.y0;
+  const s = Math.min((width - pad * 2) / ww, (height - pad * 2) / wh);
+  const ox = (width - ww * s) / 2, oy = (height - wh * s) / 2;
+  return { s, fn: (x, y) => [ox + (x - world.x0) * s, oy + (y - world.y0) * s] };
+}
+function drawWorld(ctx, width, height, pad, photosFor, gap) {
+  const t = fitTx(width, height, pad);
+  const paths = [];
+  for (const p of PROVS) {
+    const phs = photosFor(p.id);
+    paths.push([p, drawProvince(ctx, p, t.fn, phs, seedOf(p.id), gap)]);
+  }
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = colors['land-edge'];
+  ctx.lineWidth = Math.max(0.6, t.s * 0.06);
+  for (const [, path] of paths) ctx.stroke(path);
+  const nh = new Path2D();
+  for (const ring of nanhaiProj) ring.forEach(([x, y], i) => { const [a, b] = t.fn(x, y); i ? nh.lineTo(a, b) : nh.moveTo(a, b); });
+  ctx.fillStyle = colors.muted;
+  ctx.fill(nh, 'evenodd');
+  return { t, paths };
+}
+function seedOf(pid) { return (current && current.seeds && current.seeds[pid]) || 1; }
+
+function render() {
+  readColors();
+  const cssW = mapCanvas.clientWidth || 800;
+  const cssH = Math.round(cssW * 0.78);
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  if (mapCanvas.width !== Math.round(cssW * dpr) || mapCanvas.height !== Math.round(cssH * dpr)) {
+    mapCanvas.width = Math.round(cssW * dpr); mapCanvas.height = Math.round(cssH * dpr);
+    mapCanvas.style.height = cssH + 'px';
+  }
+  mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mctx.fillStyle = colors.surface;
+  mctx.fillRect(0, 0, cssW, cssH);
+  const real = current && mapPhotos().some(p => p.prov);
+  $('demoTag').hidden = !!real;
+  const photosFor = real ? (pid) => provPhotos(pid) : (pid) => DEMO.filter(d => d.prov === pid);
+  const r = drawWorld(mctx, cssW, cssH, 12, photosFor, cssW > 600 ? 1 : 0.6);
+  screenPaths = r.paths; mapTx = r.t;
+  updateCounters(real);
+}
+
+function updateCounters(real) {
+  const lit = real ? PROVS.filter(p => provPhotos(p.id).length).length : 0;
+  $('litCount').textContent = lit + ' / 34';
+  const chips = $('chips');
+  chips.textContent = '';
+  for (const p of PROVS) {
+    const n = real ? provPhotos(p.id).length : 0;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip' + (n ? ' on' : '');
+    b.textContent = p.name;
+    if (n) { const s = document.createElement('small'); s.textContent = n; b.appendChild(s); }
+    b.onclick = () => openProvince(p.id);
+    chips.appendChild(b);
+  }
+  renderPending();
+}
+
+// 点击与悬停
+function hit(ev) {
+  const rect = mapCanvas.getBoundingClientRect();
+  const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+  const dpr = mapCanvas.width / rect.width;
+  mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (const [p, path] of screenPaths) if (mctx.isPointInPath(path, x * dpr, y * dpr, 'evenodd')) return { p, x, y };
+  return null;
+}
+mapCanvas.addEventListener('click', (ev) => { const h = hit(ev); if (h) openProvince(h.p.id); });
+mapCanvas.addEventListener('mousemove', (ev) => {
+  const h = hit(ev), tip = $('tip');
+  if (!h) { tip.hidden = true; return; }
+  const n = current && mapPhotos().some(p => p.prov) ? provPhotos(h.p.id).length : 0;
+  tip.textContent = h.p.name + (n ? ' · ' + n + ' 张' : '');
+  tip.style.left = Math.min(h.x + 12, mapCanvas.clientWidth - 90) + 'px'; tip.style.top = (h.y + 12) + 'px';
+  tip.hidden = false;
+});
+mapCanvas.addEventListener('mouseleave', () => { $('tip').hidden = true; });
+
+// ---------- EXIF GPS 读取（仅 JPEG） ----------
+async function readGPS(file) {
+  try {
+    const buf = await file.slice(0, 256 * 1024).arrayBuffer();
+    const v = new DataView(buf);
+    if (v.getUint16(0) !== 0xFFD8) return null;
+    let off = 2;
+    while (off + 4 < v.byteLength) {
+      if (v.getUint8(off) !== 0xFF) return null;
+      const marker = v.getUint8(off + 1), size = v.getUint16(off + 2);
+      if (marker === 0xE1 && v.getUint32(off + 4) === 0x45786966) return parseTiff(v, off + 10);
+      if (marker === 0xDA) return null;
+      off += 2 + size;
+    }
+  } catch (e) { /* 读取失败当作无定位 */ }
+  return null;
+}
+function parseTiff(v, t) {
+  const le = v.getUint16(t) === 0x4949;
+  const u16 = (o) => v.getUint16(o, le), u32 = (o) => v.getUint32(o, le);
+  const ifd0 = t + u32(t + 4);
+  let gps = 0;
+  for (let i = 0, n = u16(ifd0); i < n; i++) { const e = ifd0 + 2 + i * 12; if (u16(e) === 0x8825) gps = t + u32(e + 8); }
+  if (!gps) return null;
+  const tags = {};
+  for (let i = 0, n = u16(gps); i < n; i++) {
+    const e = gps + 2 + i * 12, tag = u16(e);
+    if (tag === 1 || tag === 3) tags[tag] = String.fromCharCode(v.getUint8(e + 8));
+    if (tag === 2 || tag === 4) {
+      const o = t + u32(e + 8), r = (k) => u32(o + k * 8) / (u32(o + k * 8 + 4) || 1);
+      tags[tag] = r(0) + r(1) / 60 + r(2) / 3600;
+    }
+  }
+  if (tags[2] == null || tags[4] == null) return null;
+  const lat = tags[2] * (tags[1] === 'S' ? -1 : 1), lon = tags[4] * (tags[3] === 'W' ? -1 : 1);
+  if (!lat && !lon) return null;
+  return { lat, lon };
+}
+
+// 经纬度 → 省份
+function inRing(ring, x, y) {
+  let c = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+function locate(lon, lat) {
+  for (const p of PROVS) {
+    let c = false;
+    for (const poly of p.polygons) for (const ring of poly) if (inRing(ring, lon, lat)) c = !c;
+    if (c) return p.id;
+  }
+  // 海岸线附近：低精度边界可能把海边的点判到界外，取 0.5° 内最近的省
+  let best = null, bd = 0.25;
+  for (const p of PROVS) for (const poly of p.polygons) for (const ring of poly) for (const [x, y] of ring) {
+    const d = (x - lon) ** 2 + (y - lat) ** 2;
+    if (d < bd) { bd = d; best = p.id; }
+  }
+  return best;
+}
+
+// ---------- 导入 ----------
+async function shrink(file) {
+  let src;
+  try { src = await createImageBitmap(file); }
+  catch (e) {
+    src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
+  }
+  const max = 640, sc = Math.min(1, max / Math.max(src.width, src.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(src.width * sc); c.height = Math.round(src.height * sc);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
+}
+async function importFiles(files, forcedProv) {
+  if (!files.length) return;
+  toast('正在处理 ' + files.length + ' 张照片…', 0);
+  let placed = 0, pending = 0, failed = 0;
+  const touched = new Set();
+  for (const f of files) {
+    try {
+      const gps = forcedProv ? null : await readGPS(f);
+      const prov = forcedProv || (gps ? locate(gps.lon, gps.lat) : null);
+      const blob = await shrink(f);
+      const ph = { id: uid(), mapId: current.id, prov: prov || null, blob, lat: gps && gps.lat, lon: gps && gps.lon, added: Date.now() };
+      allPhotos.push(ph);
+      await dbPut('photos', ph);
+      if (prov) { placed++; touched.add(prov); } else pending++;
+    } catch (e) { failed++; }
+  }
+  layoutCache.clear();
+  render();
+  const parts = [];
+  if (placed) parts.push(placed + ' 张已放入 ' + touched.size + ' 个省');
+  if (pending) parts.push(pending + ' 张没有位置信息，放在“待分配”');
+  if (failed) parts.push(failed + ' 张无法读取（HEIC 格式请先转成 JPEG）');
+  toast(parts.join('；') || '没有可用的照片');
+  if (forcedProv && $('provDlg').open) fillProvince(forcedProv);
+}
+$('addAuto').onclick = () => $('fileAuto').click();
+$('fileAuto').onchange = (e) => { const fs = [...e.target.files]; e.target.value = ''; importFiles(fs, null); };
+
+// ---------- 待分配 ----------
+function provOptions(sel) {
+  sel.textContent = '';
+  for (const p of PROVS) { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o); }
+}
+provOptions($('pendingProv'));
+function renderPending() {
+  const list = current ? pendingPhotos() : [];
+  $('pending').hidden = !list.length;
+  $('pendingCount').textContent = list.length + ' 张';
+  const box = $('pendingThumbs'); box.textContent = '';
+  for (const ph of list) box.appendChild(thumbEl(ph));
+}
+$('pendingAssign').onclick = async () => {
+  const pid = $('pendingProv').value;
+  for (const ph of pendingPhotos()) { ph.prov = pid; await dbPut('photos', ph); }
+  layoutCache.clear(); render(); toast('已放入' + byId[pid].name);
+};
+$('pendingDrop').onclick = async () => {
+  for (const ph of pendingPhotos()) await removePhoto(ph, true);
+  render();
+};
+
+function thumbEl(ph) {
+  const d = document.createElement('div'); d.className = 'thumb';
+  const im = document.createElement('img'); im.src = thumbURL(ph); im.alt = ''; d.appendChild(im);
+  if (!ph.canvas) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = '删除'; b.setAttribute('aria-label', '删除这张照片');
+    b.onclick = async () => { const pid = ph.prov; await removePhoto(ph); render(); if (pid && $('provDlg').open) fillProvince(pid); };
+    d.appendChild(b);
+  }
+  return d;
+}
+async function removePhoto(ph, quiet) {
+  allPhotos = allPhotos.filter(p => p.id !== ph.id);
+  await dbDel('photos', ph.id);
+  if (urlCache.has(ph.id)) { URL.revokeObjectURL(urlCache.get(ph.id)); urlCache.delete(ph.id); }
+  imgCache.delete(ph.id); layoutCache.clear();
+}
+
+// ---------- 单省详情 ----------
+let openProv = null;
+function openProvince(pid) {
+  openProv = pid;
+  if (!$('provDlg').open) $('provDlg').showModal();
+  fillProvince(pid);
+}
+function fillProvince(pid) {
+  readColors();
+  const p = byId[pid];
+  const real = mapPhotos().some(x => x.prov);
+  const phs = real ? provPhotos(pid) : DEMO.filter(d => d.prov === pid);
+  $('provName').textContent = p.name;
+  $('provCount').textContent = real ? (phs.length ? phs.length + ' 张照片' : '还没有照片') : '示例';
+  const c = $('provCanvas');
+  const cssW = c.clientWidth || 600, bw = p.bbox.x1 - p.bbox.x0, bh = p.bbox.y1 - p.bbox.y0;
+  const cssH = Math.round(Math.min(cssW * bh / bw, window.innerHeight * 0.5) );
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  c.width = cssW * dpr; c.height = cssH * dpr; c.style.height = cssH + 'px';
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = colors.bg; ctx.fillRect(0, 0, cssW, cssH);
+  const pad = 12, s = Math.min((cssW - pad * 2) / bw, (cssH - pad * 2) / bh);
+  const ox = (cssW - bw * s) / 2, oy = (cssH - bh * s) / 2;
+  drawProvince(ctx, p, (x, y) => [ox + (x - p.bbox.x0) * s, oy + (y - p.bbox.y0) * s], phs, seedOf(pid), 2);
+  const box = $('provThumbs'); box.textContent = '';
+  for (const ph of phs) box.appendChild(thumbEl(ph));
+  $('provShuffle').disabled = phs.length < 2 || !real;
+  $('provClear').disabled = !real || !phs.length;
+  $('provClear').textContent = '清空';
+  // 图片解码是异步的，稍后再画一次
+  if (phs.some(ph => !imageFor(ph))) setTimeout(() => { if ($('provDlg').open && openProv === pid) fillProvince(pid); }, 300);
+}
+$('provClose').onclick = () => $('provDlg').close();
+$('provAdd').onclick = () => $('fileProv').click();
+$('fileProv').onchange = (e) => { const fs = [...e.target.files]; e.target.value = ''; importFiles(fs, openProv); };
+$('provShuffle').onclick = async () => {
+  current.seeds = current.seeds || {};
+  current.seeds[openProv] = Math.floor(Math.random() * 1e9) + 2;
+  await dbPut('maps', current);
+  fillProvince(openProv); render();
+};
+$('provClear').onclick = async () => {
+  const b = $('provClear');
+  if (b.textContent === '清空') { b.textContent = '确认清空？'; return; }
+  for (const ph of provPhotos(openProv)) await removePhoto(ph, true);
+  render(); fillProvince(openProv);
+};
+
+// ---------- 多张地图 ----------
+function renderMapSelect() {
+  const sel = $('mapSelect'); sel.textContent = '';
+  for (const m of maps) { const o = document.createElement('option'); o.value = m.id; o.textContent = m.name; sel.appendChild(o); }
+  sel.value = current.id;
+  $('deleteMap').textContent = '删除';
+}
+$('mapSelect').onchange = (e) => {
+  current = maps.find(m => m.id === e.target.value);
+  try { localStorage.setItem('zuji-current', current.id); } catch (err) { /* 忽略 */ }
+  layoutCache.clear(); render();
+};
+let nameMode = null;
+function askName(mode, initial) {
+  nameMode = mode; $('nameRow').hidden = false; $('nameInput').value = initial || ''; $('nameInput').focus();
+}
+$('newMap').onclick = () => askName('new', '');
+$('renameMap').onclick = () => askName('rename', current.name);
+$('nameCancel').onclick = () => { $('nameRow').hidden = true; };
+$('nameOk').onclick = async () => {
+  const name = $('nameInput').value.trim() || '未命名地图';
+  if (nameMode === 'new') {
+    current = { id: uid(), name, seeds: {}, created: Date.now() };
+    maps.push(current);
+  } else current.name = name;
+  await dbPut('maps', current);
+  $('nameRow').hidden = true;
+  renderMapSelect(); render();
+};
+$('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('nameOk').click(); });
+$('deleteMap').onclick = async () => {
+  const b = $('deleteMap');
+  if (b.textContent === '删除') { b.textContent = '确认删除“' + current.name + '”？'; return; }
+  for (const ph of mapPhotos()) await removePhoto(ph, true);
+  await dbDel('maps', current.id);
+  maps = maps.filter(m => m.id !== current.id);
+  if (!maps.length) { const m = { id: uid(), name: '我的地图', seeds: {}, created: Date.now() }; maps.push(m); await dbPut('maps', m); }
+  current = maps[0];
+  renderMapSelect(); render();
+};
+
+// ---------- 导出分享图 ----------
+$('exportBtn').onclick = () => {
+  readColors();
+  const W = 1500, H = 1500;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = colors.surface; ctx.fillRect(0, 0, W, H);
+  const real = mapPhotos().some(p => p.prov);
+  const photosFor = real ? (pid) => provPhotos(pid) : (pid) => DEMO.filter(d => d.prov === pid);
+  ctx.save(); ctx.translate(0, 220);
+  drawWorld(ctx, W, H - 300, 60, photosFor, 2);
+  ctx.restore();
+  const lit = real ? PROVS.filter(p => provPhotos(p.id).length).length : 0;
+  ctx.fillStyle = colors.ink;
+  ctx.font = '900 76px ' + getComputedStyle(document.documentElement).getPropertyValue('--font-display');
+  ctx.fillText(current.name, 80, 150);
+  ctx.save(); ctx.translate(W - 260, 110); ctx.rotate(-0.07);
+  ctx.strokeStyle = colors.seal; ctx.lineWidth = 6; ctx.strokeRect(-20, -70, 220, 130);
+  ctx.fillStyle = colors.seal; ctx.textAlign = 'center';
+  ctx.font = '900 64px ' + getComputedStyle(document.documentElement).getPropertyValue('--font-display');
+  ctx.fillText(lit + '/34', 90, 5);
+  ctx.font = '700 26px sans-serif'; ctx.fillText('已 点 亮', 90, 45);
+  ctx.restore();
+  ctx.fillStyle = colors.muted; ctx.font = '26px sans-serif';
+  ctx.fillText(real ? '足迹拼图' : '足迹拼图 · 示例', 80, H - 50);
+  $('exportImg').src = c.toDataURL('image/png');
+  $('exportDlg').showModal();
+};
+$('exportClose').onclick = () => $('exportDlg').close();
+
+// ---------- 杂项 ----------
+let toastTimer = null;
+function toast(msg, ms = 3600) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); if (ms) toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+let resizeTimer = null;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 120); });
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render); } catch (e) { /* 旧浏览器 */ }
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+(async function boot() {
+  if (!PROVS.length) { toast('地图数据没有加载成功：缺少 china-provinces.js', 0); return; }
+  db = await openDB();
+  maps = (await dbGetAll('maps')) || [];
+  allPhotos = (await dbGetAll('photos')) || [];
+  if (!maps.length) { const m = { id: uid(), name: '我的地图', seeds: {}, created: Date.now() }; maps.push(m); await dbPut('maps', m); }
+  let saved = null; try { saved = localStorage.getItem('zuji-current'); } catch (e) { /* 忽略 */ }
+  current = maps.find(m => m.id === saved) || maps[0];
+  renderMapSelect();
+  render();
+  if (!db) toast('浏览器不允许本地存储，刷新后照片会丢失');
+})();
+})();
+</script>
+</body>
+</html>
